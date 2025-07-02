@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>登录 + 多画面直播</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Arial; margin:0; padding:0; background:#f0f0f0; text-align:center; }
+        .hidden { display:none; }
+        /* 登录样式 */
+        #loginPage { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; }
+        input { padding:10px; font-size:16px; width:250px; margin:8px 0; }
+        button { padding:12px 20px; font-size:16px; width:270px; cursor:pointer; }
+        .error { color:red; margin-top:10px; display:none; }
+        /* 首页样式 */
+        .column { display:flex; flex-direction:column; align-items:center; gap:30px; padding:20px; }
+        .cam-name { font-weight:bold; margin-bottom:5px; }
+        video { width:640px; height:360px; border:1px solid #ccc; cursor:pointer; }
+        /* 回放区 */
+        .replays { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; padding:20px; }
+        .replays video { width:300px; height:170px; }
+    </style>
+</head>
+
+<body>
+
+    <!-- 登录页 -->
+    <div id="loginPage">
+        <h2>请登录</h2>
+        <input type="text" id="username" placeholder="用户名">
+        <input type="password" id="password" placeholder="密码">
+        <button onclick="login()">登录</button>
+        <div id="loginError" class="error">用户名或密码错误</div>
+    </div>
+
+    <!-- 多画面首页 -->
+    <div id="home" class="hidden">
+        <h2>多画面直播（点击查看详情）</h2>
+        <div id="liveContainer" class="column"></div>
+    </div>
+
+    <!-- 详情页 -->
+    <div id="detail" class="hidden">
+        <h2 id="detailTitle">摄像头详情</h2>
+        <video id="detailLive" controls autoplay></video>
+        <h3>录像回放</h3>
+        <div id="replayContainer" class="replays"></div>
+        <button onclick="backHome()">返回</button>
+    </div>
+
+    <script>
+        // 配置
+        const liveStreams = [
+          "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+          "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+          "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+          "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+        ];
+        const liveNames = ["门口摄像头","仓库摄像头","办公室摄像头","停车场摄像头"];
+        const replayGroups = [
+          new Array(6).fill("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
+          new Array(6).fill("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
+          new Array(6).fill("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
+          new Array(6).fill("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8")
+        ];
+        
+        // 登录逻辑
+        function login(){
+          const user = document.getElementById("username").value.trim();
+          const pwd = document.getElementById("password").value.trim();
+          const err = document.getElementById("loginError");
+        
+          if(user==="admin" && pwd==="123456"){
+            // 隐藏登录页
+            document.getElementById("loginPage").style.display="none";
+            // 显示首页
+            document.getElementById("home").classList.remove("hidden");
+            initHome();
+          }else{
+            err.style.display="block";
+          }
+        }
+        
+        // 初始化多画面
+        function initHome(){
+          const container = document.getElementById("liveContainer");
+          container.innerHTML="";
+          liveStreams.forEach((url,i)=>{
+            const div=document.createElement("div");
+            const name=document.createElement("div");
+            name.className="cam-name";
+            name.textContent=liveNames[i];
+            div.appendChild(name);
+        
+            const video=document.createElement("video");
+            video.muted=true;
+            video.onclick=()=>showDetail(i);
+            div.appendChild(video);
+        
+            container.appendChild(div);
+        
+            if(Hls.isSupported()){
+              const hls=new Hls();
+              hls.loadSource(url);
+              hls.attachMedia(video);
+              hls.on(Hls.Events.MANIFEST_PARSED,()=>video.play());
+            }else if(video.canPlayType("application/vnd.apple.mpegurl")){
+              video.src=url;
+              video.addEventListener("loadedmetadata",()=>video.play());
+            }
+          });
+        }
+        
+        // 显示详情页
+        function showDetail(index){
+          document.getElementById("home").classList.add("hidden");
+          document.getElementById("detail").classList.remove("hidden");
+          document.getElementById("detailTitle").textContent=liveNames[index]+" 详情";
+        
+          const liveVideo=document.getElementById("detailLive");
+          if(Hls.isSupported()){
+            const hls=new Hls();
+            hls.loadSource(liveStreams[index]);
+            hls.attachMedia(liveVideo);
+            hls.on(Hls.Events.MANIFEST_PARSED,()=>liveVideo.play());
+          }else if(liveVideo.canPlayType("application/vnd.apple.mpegurl")){
+            liveVideo.src=liveStreams[index];
+            liveVideo.addEventListener("loadedmetadata",()=>liveVideo.play());
+          }
+        
+          // 加载回放
+          const replayContainer=document.getElementById("replayContainer");
+          replayContainer.innerHTML="";
+          replayGroups[index].forEach(url=>{
+            const v=document.createElement("video");
+            v.controls=true;
+            if(Hls.isSupported()){
+              const hls=new Hls();
+              hls.loadSource(url);
+              hls.attachMedia(v);
+            }else if(v.canPlayType("application/vnd.apple.mpegurl")){
+              v.src=url;
+            }
+            replayContainer.appendChild(v);
+          });
+        }
+        
+        // 返回首页
+        function backHome(){
+          document.getElementById("detail").classList.add("hidden");
+          document.getElementById("home").classList.remove("hidden");
+        
+          // 停止详情直播
+          const v=document.getElementById("detailLive");
+          v.pause();
+          v.src="";
+          document.getElementById("replayContainer").innerHTML="";
+        }
+    </script>
+
+</body>
+
+</html>
